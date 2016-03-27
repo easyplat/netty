@@ -15,7 +15,6 @@
  */
 package io.netty.util;
 
-import io.netty.util.internal.MpscLinkedQueueNode;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
@@ -472,8 +471,7 @@ public class HashedWheelTimer implements Timer {
         }
     }
 
-    private static final class HashedWheelTimeout extends MpscLinkedQueueNode<Timeout>
-            implements Timeout {
+    private static final class HashedWheelTimeout implements Timeout {
 
         private static final int ST_INIT = 0;
         private static final int ST_CANCELLED = 1;
@@ -565,11 +563,6 @@ public class HashedWheelTimer implements Timer {
         @Override
         public boolean isExpired() {
             return state() == ST_EXPIRED;
-        }
-
-        @Override
-        public HashedWheelTimeout value() {
-            return this;
         }
 
         public void expire() {
