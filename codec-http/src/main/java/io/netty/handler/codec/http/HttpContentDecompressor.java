@@ -19,6 +19,8 @@ import static io.netty.handler.codec.http.HttpHeaderValues.DEFLATE;
 import static io.netty.handler.codec.http.HttpHeaderValues.GZIP;
 import static io.netty.handler.codec.http.HttpHeaderValues.X_DEFLATE;
 import static io.netty.handler.codec.http.HttpHeaderValues.X_GZIP;
+
+import io.netty.channel.ChannelConfig;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.compression.ZlibCodecFactory;
 import io.netty.handler.codec.compression.ZlibWrapper;
@@ -53,16 +55,29 @@ public class HttpContentDecompressor extends HttpContentDecoder {
     protected EmbeddedChannel newContentDecoder(String contentEncoding) throws Exception {
         if (GZIP.contentEqualsIgnoreCase(contentEncoding) ||
             X_GZIP.contentEqualsIgnoreCase(contentEncoding)) {
-            return new EmbeddedChannel(ZlibCodecFactory.newZlibDecoder(ZlibWrapper.GZIP));
+            return new CompressorChannel(ZlibWrapper.GZIP);
         }
         if (DEFLATE.contentEqualsIgnoreCase(contentEncoding) ||
             X_DEFLATE.contentEqualsIgnoreCase(contentEncoding)) {
             final ZlibWrapper wrapper = strict ? ZlibWrapper.ZLIB : ZlibWrapper.ZLIB_OR_NONE;
             // To be strict, 'deflate' means ZLIB, but some servers were not implemented correctly.
-            return new EmbeddedChannel(ZlibCodecFactory.newZlibDecoder(wrapper));
+            return new CompressorChannel(wrapper);
         }
 
         // 'identity' or unsupported
         return null;
+    }
+
+    private final class CompressorChannel extends EmbeddedChannel {
+        CompressorChannel(ZlibWrapper wrapper) {
+            super(ZlibCodecFactory.newZlibDecoder(wrapper));
+        }
+
+        // Share the config of the real channel so the same ByteBufAllocator configuration is used.
+        // See https://github.com/netty/netty/issues/5294
+        @Override
+        public ChannelConfig config() {
+            return ctx.channel().config();
+        }
     }
 }
