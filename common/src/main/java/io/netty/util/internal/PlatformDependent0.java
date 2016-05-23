@@ -19,6 +19,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 import sun.misc.Unsafe;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.Buffer;
@@ -44,6 +45,8 @@ final class PlatformDependent0 {
     private static final long CHAR_ARRAY_INDEX_SCALE;
     private static final long STRING_CHAR_VALUE_FIELD_OFFSET;
     private static final long STRING_BYTE_VALUE_FIELD_OFFSET;
+    private static final Constructor<?> DIRECT_BUFFER_CONSTRUCTOR;
+
     static final int HASH_CODE_ASCII_SEED = 0xc2b2ae35; // constant borrowed from murmur3
 
     /**
@@ -73,7 +76,20 @@ final class PlatformDependent0 {
             // Failed to access the address field.
             addressField = null;
         }
+
         logger.debug("java.nio.Buffer.address: {}", addressField != null? "available" : "unavailable");
+
+        Constructor<?> directBufferConstructor;
+        try {
+            directBufferConstructor = direct.getClass().getDeclaredConstructor(long.class, int.class);
+            directBufferConstructor.setAccessible(true);
+        } catch (Throwable t) {
+            directBufferConstructor = null;
+        }
+        DIRECT_BUFFER_CONSTRUCTOR = directBufferConstructor;
+
+        logger.debug("java.nio.DirectByteBuffer.<init>(long, int): {}",
+                DIRECT_BUFFER_CONSTRUCTOR != null? "available" : "unavailable");
 
         Unsafe unsafe;
         if (addressField != null) {
@@ -196,6 +212,20 @@ final class PlatformDependent0 {
     static void throwException(Throwable cause) {
         // JVM has been observed to crash when passing a null argument. See https://github.com/netty/netty/issues/4131.
         UNSAFE.throwException(checkNotNull(cause, "cause"));
+    }
+
+    static boolean hasDirectBufferNoCleanerConstructor() {
+        return DIRECT_BUFFER_CONSTRUCTOR != null;
+    }
+
+    static ByteBuffer allocateDirectNoCleaner(int capacity) {
+        assert DIRECT_BUFFER_CONSTRUCTOR != null;
+        long address = UNSAFE.allocateMemory(capacity);
+        try {
+            return (ByteBuffer) DIRECT_BUFFER_CONSTRUCTOR.newInstance(address, capacity);
+        } catch (Throwable cause) {
+            throw new IllegalStateException(cause);
+        }
     }
 
     static void freeDirectBuffer(ByteBuffer buffer) {
